@@ -35,7 +35,15 @@ Write-Host ""
 Write-Host "  [1/4] 复制文件（约 7 GB，第一次要几分钟，请耐心等）..." -ForegroundColor Green
 New-Item -ItemType Directory -Force -Path $Dst | Out-Null
 $robolog = Join-Path $env:TEMP "gsd-pet-install.log"
-& robocopy $Src $Dst /E /NFL /NDL /NJH /NJS /NP /XF "安装.cmd" "install.ps1" "安装日志.txt" /LOG:$robolog | Out-Null
+# 先关掉正在运行的桌宠，否则 robocopy 会在被占用的 dll 上无限重试（看起来像卡死）
+Get-Process -Name "gsd大肥鱼桌宠" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*gsd-pet*standalone.js*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*pet-voice*server.py*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 2
+# /R:2 /W:2：最多重试 2 次，别死等
+& robocopy $Src $Dst /E /NFL /NDL /NJH /NJS /NP /R:2 /W:2 /XF "安装.cmd" "install.ps1" "安装日志.txt" /LOG:$robolog | Out-Null
 $rc = $LASTEXITCODE
 if ($rc -ge 8) {
     Write-Host "  [错误] 复制失败（robocopy 代码 $rc），可能有文件被杀毒软件占用。" -ForegroundColor Red

@@ -325,9 +325,36 @@ def reload_pet(log=None):
         return False
 
 
+def default_peek():
+    """内置默认值 + 按安装位置算出语音服务路径（换台电脑也能直接用克隆音色）。"""
+    cfg = dict(DEFAULT_PEEK)
+    cfg["voiceServerScript"] = os.path.join(BASE, "app", "pet-voice", "server.py")
+    cfg["voicePython"] = os.path.join(BASE, "runtime", "python", "python.exe")
+    return cfg
+
+
 def ensure_peek_cfg():
     if not os.path.exists(PEEK_FILE):
-        write_json(PEEK_FILE, DEFAULT_PEEK)
+        write_json(PEEK_FILE, default_peek())
+        return
+    # 老/别人机器上的 peek.json 可能缺语音路径 ⇒ 补齐，否则会退回机器人音色
+    got = read_json(PEEK_FILE, None)
+    if isinstance(got, dict):
+        changed = False
+        if not got.get("voiceServerScript"):
+            got["voiceServerScript"] = os.path.join(BASE, "app", "pet-voice", "server.py")
+            changed = True
+        if not got.get("voicePython"):
+            got["voicePython"] = os.path.join(BASE, "runtime", "python", "python.exe")
+            changed = True
+        if not got.get("voiceService"):
+            got["voiceService"] = "http://127.0.0.1:8848"
+            changed = True
+        if not got.get("petId"):
+            got["petId"] = "main"
+            changed = True
+        if changed:
+            write_json(PEEK_FILE, got)
 
 
 def start_pet(cfg, log):

@@ -1011,7 +1011,7 @@ async function visionDirect(ai, system, hint, bytes, timeoutMs) {
 		headers["anthropic-version"] = "2023-06-01";
 		body = {
 			model: ai.model,
-			max_tokens: ai.maxTokens,
+			max_tokens: Math.max(1024, Number(ai.maxTokens) || 0),
 			system,
 			messages: [{
 				role: "user",
@@ -1025,7 +1025,7 @@ async function visionDirect(ai, system, hint, bytes, timeoutMs) {
 		headers.authorization = "Bearer " + ai.apiKey;
 		body = {
 			model: ai.model,
-			max_tokens: ai.maxTokens,
+			max_tokens: Math.max(1024, Number(ai.maxTokens) || 0),
 			messages: [
 				{ role: "system", content: system },
 				{
@@ -1065,6 +1065,12 @@ async function visionDirect(ai, system, hint, bytes, timeoutMs) {
 	} else {
 		const msg = j?.choices?.[0]?.message;
 		text = typeof msg?.content === "string" ? msg.content : Array.isArray(msg?.content) ? msg.content.map((c) => (typeof c === "string" ? c : c?.text || "")).join("") : "";
+		// deepseek-flash 是推理模型：正文可能为空，思考写在 reasoning_content 里
+		if (!String(text).trim() && typeof msg?.reasoning_content === "string") {
+			const rc = msg.reasoning_content;
+			const m = rc.match(/["“]([^"”]{4,80})["”]/) || rc.match(/[：:]\s*([^\n]{4,60})$/);
+			text = (m ? m[1] : rc).trim();
+		}
 	}
 	text = String(text).trim();
 	if (!text) return { ok: false, reason: "generate-error", message: "模型没有返回文本" };
