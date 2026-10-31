@@ -1,0 +1,22 @@
+# 运行时与模型不进仓库（太大）
+runtime/
+app/dsh-pet/
+app/pet-voice/models/
+app/pet-voice/repos/
+app/pet-voice/say/
+app/pet-voice/cache/
+
+# 构建产物
+dist/
+build/
+*.spec
+__pycache__/
+*.pyc
+
+# 分卷与安装包
+*.zip
+*.zip.0*
+
+# 本机文件
+data/
+*.log
