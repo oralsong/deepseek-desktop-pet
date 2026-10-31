@@ -15,8 +15,8 @@
 
 ## 一、安装（给用户）
 
-1. 下载 Release 里的分卷 `gsd-pet-1.0.zip.001 / .002 / .003` 和 `合并.cmd`
-2. 三个分卷放同一个文件夹，双击 `合并.cmd` → 得到 `gsd-pet-1.0.zip`
+1. 下载 Release 里的分卷 `gsd-pet-1.0.zip.001 / .002 / .003` 和 `join.cmd`
+2. 四个文件放同一个文件夹，双击 `join.cmd` → 得到 `gsd-pet-1.0.zip`
 3. 解压（解压后约 6.7 GB）
 4. 双击 **`setup.cmd`** → 装到 `%LOCALAPPDATA%\gsd-pet`，桌面出现「gsd特制大肥鱼桌宠」
 5. 打开 App，填：
