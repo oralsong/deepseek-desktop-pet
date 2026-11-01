@@ -57,7 +57,7 @@ DEFAULT_CFG = {
 
 DEFAULT_PEEK = {
     "enabled": True, "petId": "", "intervalSec": 4, "minChange": 0.04, "minCells": 10,
-    "cellDiff": 0.1, "cooldownSec": 15, "silentWhenIdle": True, "maxWidth": 1280,
+    "cellDiff": 0.1, "cooldownSec": 8, "silentWhenIdle": True, "maxWidth": 1280,
     "quality": 85, "smallWidth": 96, "smallHeight": 54, "captureTimeoutMs": 15000,
     "generateTimeoutMs": 45000, "debugLog": True, "prompt": "", "provider": "", "model": "",
     "quietOnFullscreen": True, "speak": True, "speakVoice": "", "speakRate": 1,
@@ -333,6 +333,36 @@ def default_peek():
     return cfg
 
 
+MAIN_CONFIG_TEMPLATE = """// 桌宠名字与人设（改完在 App 里点「停止桌宠」再「运行」）
+{
+  "pets": [
+    {
+      "id": "main",
+      "name": "哦鲸鲸",
+      "size": 462,
+      "display": "desktop",
+      "fixedEnabled": false,
+      "position": { "anchor": "corner", "corner": "bottom-right" },
+      "whisperPrompt": "你是一只蓝鲸，我喊你蓝色大肥鱼，你喊我老大。说话像坐在旁边陪我玩游戏的朋友：短、自然、有点情绪，一句 20 字以内，不要重复上一句，不要提截图这两个字。"
+    }
+  ]
+}
+"""
+
+
+def ensure_main_config():
+    """首次启动写一份带名字/人设的配置，避免新装是默认的「蓝毛小女仆」。"""
+    path = os.path.join(PET_CONF_DIR, "main-config.jsonc")
+    if os.path.exists(path):
+        return
+    try:
+        os.makedirs(PET_CONF_DIR, exist_ok=True)
+        with io.open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(MAIN_CONFIG_TEMPLATE)
+    except OSError:
+        pass
+
+
 def ensure_peek_cfg():
     if not os.path.exists(PEEK_FILE):
         write_json(PEEK_FILE, default_peek())
@@ -365,6 +395,7 @@ def start_pet(cfg, log):
         log("安装包不完整：找不到 node 或 standalone.js")
         return 0
     ensure_peek_cfg()
+    ensure_main_config()
     write_ai_config(cfg)
     env = dict(os.environ)
     env["DSH_HOME"] = DSH_HOME
