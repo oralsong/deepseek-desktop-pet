@@ -338,7 +338,7 @@ if (check.status !== 0) {
 }
 
 for (const [from, to] of [
-	[HERE + "/peek.mjs", join(PKG, "lib", "peek.js")],
+	[HERE + "/peek.js", join(PKG, "lib", "peek.js")],
 	[HERE + "/peek-worker.ps1", join(PKG, "lib", "peek-worker.ps1")],
 	[HERE + "/peek-capture.ps1", join(PKG, "lib", "peek-capture.ps1")]
 ]) {

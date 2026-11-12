@@ -4,6 +4,7 @@ Long lived: keeps the OpenVoice converter on the GPU and the target speaker
 embedding cached. POST /say {"text": "...", "play": true} on 127.0.0.1:8848.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -40,25 +41,32 @@ os.makedirs(CACHE, exist_ok=True)
 os.makedirs(OUT, exist_ok=True)
 
 LOCK = threading.Lock()
-STATE = {"ready": False, "tcc": None, "sr": 22050, "tgt_se": None}
+STATE = {"ready": False, "loading": True, "error": "", "tcc": None, "sr": 22050, "tgt_se": None, "ref": REF}
 
 
-def init_engine():
+def init_engine(ref_path=None):
+    ref_path = os.path.abspath(ref_path or REF)
+    if not os.path.isfile(ref_path):
+        raise FileNotFoundError("voice reference not found: " + ref_path)
+    stat = os.stat(ref_path)
+    ref_key = hashlib.sha1(
+        ("%s|%s|%s" % (ref_path, stat.st_size, int(stat.st_mtime))).encode("utf-8")
+    ).hexdigest()[:16]
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tcc = ToneColorConverter(os.path.join(CKPT, "config.json"), device=device)
     tcc.load_ckpt(os.path.join(CKPT, "checkpoint.pth"))
     State_sr = tcc.hps.data.sampling_rate
-    se_path = os.path.join(CACHE, "target_se.pt")
+    se_path = os.path.join(CACHE, "target_se-%s.pt" % ref_key)
     if os.path.exists(se_path):
         tgt_se = torch.load(se_path, map_location=device)
     else:
-        tgt_se = tcc.extract_se([REF])
+        tgt_se = tcc.extract_se([ref_path])
         torch.save(tgt_se.detach().cpu(), se_path)
     dev = getattr(tcc, "device", device)
     if hasattr(tgt_se, "to"):
         tgt_se = tgt_se.to(dev)
-    STATE.update(ready=True, tcc=tcc, sr=State_sr, tgt_se=tgt_se)
-    print("engine ready sr=%d device=%s" % (State_sr, device), flush=True)
+    STATE.update(ready=True, loading=False, error="", tcc=tcc, sr=State_sr, tgt_se=tgt_se, ref=ref_path)
+    print("engine ready sr=%d device=%s ref=%s" % (State_sr, device, ref_path), flush=True)
 
 
 def edge_mp3(text, voice, mp3):
@@ -136,7 +144,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/health"):
-            return self._json(200, {"ok": True, "ready": STATE["ready"]})
+            return self._json(
+                200,
+                {
+                    "ok": True,
+                    "ready": STATE["ready"],
+                    "loading": STATE["loading"],
+                    "error": STATE["error"],
+                    "ref": STATE["ref"],
+                },
+            )
         self._json(404, {"ok": False, "reason": "not-found"})
 
     def do_POST(self):
@@ -224,10 +241,19 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8848)
+    ap.add_argument("--ref", default=REF, help="voice-cloning reference wav")
     args = ap.parse_args()
-    init_engine()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print("listening on %d" % args.port, flush=True)
+
+    def load():
+        try:
+            init_engine(args.ref)
+        except Exception as exc:  # noqa: BLE001
+            STATE.update(loading=False, error=str(exc)[:300])
+            print("engine load failed: %s" % exc, flush=True)
+
+    threading.Thread(target=load, daemon=True, name="voice-model-loader").start()
     srv.serve_forever()
 
 

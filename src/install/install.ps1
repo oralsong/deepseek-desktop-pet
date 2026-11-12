@@ -11,11 +11,11 @@ $Exe = Join-Path $Dst $ExeName
 
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Cyan
-Write-Host "     gsd特制大肥鱼桌宠   v1.0   安装程序"      -ForegroundColor Cyan
+Write-Host "     gsd特制大肥鱼桌宠   v1.1   轻量安装程序"  -ForegroundColor Cyan
 Write-Host "  ============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  安装位置：$Dst"
-Write-Host "  需要空间：约 7.3 GB"
+Write-Host "  需要空间：约 600 MB（可选语音包另算）"
 Write-Host ""
 
 if (-not (Test-Path (Join-Path $Src $ExeName))) {
@@ -32,7 +32,7 @@ if (Test-Path $Exe) {
 }
 
 Write-Host ""
-Write-Host "  [1/4] 复制文件（约 7 GB，第一次要几分钟，请耐心等）..." -ForegroundColor Green
+Write-Host "  [1/4] 复制文件（轻量版约 600 MB）..." -ForegroundColor Green
 New-Item -ItemType Directory -Force -Path $Dst | Out-Null
 $robolog = Join-Path $env:TEMP "gsd-pet-install.log"
 # 先关掉正在运行的桌宠，否则 robocopy 会在被占用的 dll 上无限重试（看起来像卡死）
@@ -70,7 +70,7 @@ New-Item -Path $key -Force | Out-Null
 Set-ItemProperty -Path $key -Name "DisplayName"     -Value "gsd特制大肥鱼桌宠"
 Set-ItemProperty -Path $key -Name "DisplayIcon"     -Value ((Join-Path $Dst "pet.ico") + ",0")
 Set-ItemProperty -Path $key -Name "InstallLocation" -Value $Dst
-Set-ItemProperty -Path $key -Name "DisplayVersion"  -Value "1.0"
+Set-ItemProperty -Path $key -Name "DisplayVersion"  -Value "1.1"
 Set-ItemProperty -Path $key -Name "Publisher"       -Value "gsd"
 Set-ItemProperty -Path $key -Name "NoModify"        -Value 1 -Type DWord
 Set-ItemProperty -Path $key -Name "NoRepair"        -Value 1 -Type DWord
@@ -102,7 +102,7 @@ Write-Host "   1) 桌面双击「gsd特制大肥鱼桌宠」"
 Write-Host "   2) 填 API Key（sk- 开头）"
 Write-Host "      模型保持 deepseek-flash（这个模型能看图，别改）"
 Write-Host "      API 地址 https://api.deepseek.com"
-Write-Host "   3) 点「运行」，等 10~30 秒（第一次要加载语音模型）"
+Write-Host "   3) 点「保存并运行」，桌宠先启动，语音模型后台加载"
 Write-Host "   4) 右键点桌宠：听我说话 / 陪玩模式"
 Write-Host ""
 Write-Host "   卸载：运行 $Dst\uninstall.cmd" -ForegroundColor Gray

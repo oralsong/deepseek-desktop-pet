@@ -9,6 +9,7 @@ app/pet-voice/cache/
 # 构建产物
 dist/
 build/
+.build/
 *.spec
 __pycache__/
 *.pyc
@@ -16,6 +17,7 @@ __pycache__/
 # 分卷与安装包
 *.zip
 *.zip.0*
+*.zip.part*
 
 # 本机文件
 data/

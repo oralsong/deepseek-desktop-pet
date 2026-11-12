@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import numpy as np
@@ -81,12 +82,24 @@ class Asr:
         self.compute_type = compute_type
         self.model_dir = model_dir
         self.model = None
+        self.ready = threading.Event()
+        self.error = ""
         self.tmp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "say", "ear-tmp.wav")
-        if engine == "whisper":
+        if engine != "whisper":
+            self.ready.set()
+            log("SAPI dictation ready (offline)")
+
+    def start_loading(self):
+        """加载 Whisper 不阻塞麦克风启动；第一段话会等它就绪。"""
+        if self.engine == "whisper":
+            threading.Thread(target=self._load_whisper, daemon=True, name="whisper-loader").start()
+
+    def _load_whisper(self):
+        try:
             from faster_whisper import WhisperModel
 
-            dev = device
-            ctype = compute_type
+            dev = self.device
+            ctype = self.compute_type
             if dev == "auto":
                 # ctranslate2 在 CUDA 上需要 torhc 自带的 cudnn/cublas，先把 torch\lib 挂进 PATH
                 try:
@@ -95,24 +108,27 @@ class Asr:
                     libdir = os.path.join(os.path.dirname(torch.__file__), "lib")
                     os.environ["PATH"] = libdir + os.pathsep + os.environ.get("PATH", "")
                     dev, ctype = "cuda", "float16"
-                    m = WhisperModel(model_dir, device=dev, compute_type=ctype)
+                    m = WhisperModel(self.model_dir, device=dev, compute_type=ctype)
                     log("whisper 用显卡加速 (%s/%s)" % (dev, ctype))
                 except Exception as e:  # noqa: BLE001
                     log("显卡转录不可用（%s），改用 CPU" % str(e)[:80])
                     dev, ctype = "cpu", "int8"
-                    m = WhisperModel(model_dir, device=dev, compute_type=ctype)
+                    m = WhisperModel(self.model_dir, device=dev, compute_type=ctype)
             else:
                 ctype = ctype or ("float16" if dev == "cuda" else "int8")
-                m = WhisperModel(model_dir, device=dev, compute_type=ctype)
+                m = WhisperModel(self.model_dir, device=dev, compute_type=ctype)
             self.model = m
             self.device = dev
             self.compute_type = ctype
-            log("whisper ready (%s/%s, model %s)" % (dev, ctype, model_dir))
-        else:
-            log("SAPI dictation ready (offline)")
+            log("whisper ready (%s/%s, model %s)" % (dev, ctype, self.model_dir))
+        except Exception as exc:  # noqa: BLE001
+            self.error = str(exc)[:200]
+            log("whisper load failed: %s" % self.error)
+        finally:
+            self.ready.set()
 
     def transcribe(self, audio, lang):
-        if self.engine == "whisper":
+        if self.engine == "whisper" and self.ready.wait(timeout=180) and self.model is not None:
             segments, _info = self.model.transcribe(
                 audio,
                 language=lang,
@@ -123,6 +139,8 @@ class Asr:
             )
             text = "".join(s.text for s in segments).strip()
             return filter_echo(text)
+        if self.engine == "whisper":
+            log("whisper unavailable, falling back to SAPI: %s" % (self.error or "timeout"))
         return self._sapi(audio)
 
     def _sapi(self, audio):
@@ -292,6 +310,7 @@ def main():
         return
 
     asr = Asr(engine, args.asr_device, args.compute, args.model_dir)
+    asr.start_loading()
 
     noise = 0.006
     speaking = False
