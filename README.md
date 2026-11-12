@@ -22,8 +22,8 @@
 
 | 文件 | 大小 | 用途 |
 |---|---:|---|
-| `gsd-pet-lite-1.1-setup.exe` | 约 236 MB | 轻量单文件安装器，含桌宠、Electron、Node、系统语音 |
-| `gsd-pet-lite-1.1.zip` | 约 237 MB | 同内容便携包 |
+| `gsd-pet-lite-1.1-setup.exe` | 约 398 MB | 轻量单文件安装器，含桌宠、Electron、Node、系统语音 |
+| `gsd-pet-lite-1.1.zip` | 约 398 MB | 同内容便携包 |
 | `gsd-pet-voice-pack-1.1.zip.part01` | 1.80 GB | GitHub 语音分卷 1 |
 | `gsd-pet-voice-pack-1.1.zip.part02` | 1.66 GB | GitHub 语音分卷 2 |
 | `install-voice-pack-from-parts.ps1` | 小 | 合并、校验、解压并安装语音包 |

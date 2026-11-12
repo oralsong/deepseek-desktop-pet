@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Management;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -465,30 +466,64 @@ internal sealed class LauncherForm : Form
             WorkingDirectory = petPkg,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
         info.EnvironmentVariables["DSH_HOME"] = dataDir;
         info.EnvironmentVariables["DSH_PET_ELECTRON_PATH"] = electronExe;
         info.EnvironmentVariables["DSH_PET_CONFIG"] = peekFile;
         try
         {
-            Process.Start(info);
+            Process child = Process.Start(info);
+            child.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e)
+            {
+                if (!string.IsNullOrEmpty(e.Data)) Log("[node] " + e.Data);
+            };
+            child.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e)
+            {
+                if (!string.IsNullOrEmpty(e.Data)) Log("[node:error] " + e.Data);
+            };
+            child.BeginOutputReadLine();
+            child.BeginErrorReadLine();
+            Log("桌宠进程已启动（pid " + child.Id + "）");
+            for (int i = 0; i < 60; i++)
+            {
+                System.Threading.Thread.Sleep(250);
+                if (child.HasExited)
+                {
+                    Log("桌宠进程提前退出，退出码 " + child.ExitCode);
+                    return;
+                }
+                if (IsPortOpen(3080))
+                {
+                    int port = PetPort();
+                    Log("桌宠起来了（127.0.0.1:" + (port > 0 ? port : 3080) + "）");
+                    return;
+                }
+            }
         }
         catch (Exception error)
         {
             Log("启动桌宠失败：" + error.Message);
             return;
         }
-        for (int i = 0; i < 100; i++)
+        Log("桌宠启动超时（15 秒），详细错误见上方 node 日志");
+    }
+
+    private static bool IsPortOpen(int port)
+    {
+        try
         {
-            if (PetPort() > 0)
+            using (var client = new TcpClient())
             {
-                Log("桌宠起来了（127.0.0.1:" + PetPort() + "）");
-                return;
+                IAsyncResult result = client.BeginConnect(IPAddress.Loopback, port, null, null);
+                if (!result.AsyncWaitHandle.WaitOne(120)) return false;
+                client.EndConnect(result);
+                return true;
             }
-            System.Threading.Thread.Sleep(300);
         }
-        Log("桌宠启动超时，看看是不是被安全软件拦了");
+        catch { return false; }
     }
 
     private void StartVoice(Dictionary<string, object> cfg)

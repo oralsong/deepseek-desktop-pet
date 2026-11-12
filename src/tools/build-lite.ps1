@@ -34,7 +34,7 @@ try {
     "runtime/electron",
     "runtime/node.exe",
     "pet.ico"
-  ) @("app/dsh-pet/node_modules/*", "app/dsh-pet/node_modules/node_modules/*")
+  )
 
 } finally {
   Pop-Location
@@ -62,7 +62,6 @@ $exe = Join-Path $stage "gsd大肥鱼桌宠.exe"
   (Join-Path $root "src\launcher\DesktopPetLauncher.cs")
 if ($LASTEXITCODE -ne 0) { throw "Failed to compile launcher." }
 
-Remove-Item -LiteralPath (Join-Path $stage "app\dsh-pet\node_modules") -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $stage "runtime\python\Lib\site-packages") -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -LiteralPath $stage -Recurse -File -ErrorAction SilentlyContinue |
   Where-Object { $_.Extension -in @(".orig", ".log", ".pyc") } |
