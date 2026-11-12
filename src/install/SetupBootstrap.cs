@@ -43,34 +43,60 @@ internal static class Program
 
     public static string ExtractPayload(string destination)
     {
-        string zip = Path.Combine(Path.GetTempPath(), "gsd-pet-payload-" + Guid.NewGuid().ToString("N") + ".zip");
+        using (PayloadPackage package = OpenPayload())
+        {
+            foreach (ZipArchiveEntry entry in package.Archive.Entries)
+            {
+                string target = SafeTarget(destination, entry.FullName);
+                if (entry.Name.Length == 0)
+                {
+                    Directory.CreateDirectory(target);
+                    continue;
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(target));
+                using (Stream input = entry.Open())
+                using (FileStream output = File.Create(target))
+                    input.CopyTo(output);
+            }
+        }
+        return destination;
+    }
+
+    public static PayloadPackage OpenPayload()
+    {
+        FileStream self = File.OpenRead(Application.ExecutablePath);
         try
         {
-            using (FileStream self = File.OpenRead(Application.ExecutablePath))
+            if (self.Length < Magic.Length + 8) throw new InvalidDataException("安装器缺少内置数据。");
+            self.Seek(-(Magic.Length + 8), SeekOrigin.End);
+            byte[] trailer = new byte[8 + Magic.Length];
+            ReadExactly(self, trailer);
+            for (int i = 0; i < Magic.Length; i++)
             {
-                if (self.Length < Magic.Length + 8) throw new InvalidDataException("安装器缺少内置数据。");
-                self.Seek(-(Magic.Length + 8), SeekOrigin.End);
-                byte[] trailer = new byte[8 + Magic.Length];
-                ReadExactly(self, trailer);
-                for (int i = 0; i < Magic.Length; i++)
-                {
-                    if (trailer[8 + i] != Magic[i]) throw new InvalidDataException("安装器数据标记无效。");
-                }
-                long length = BitConverter.ToInt64(trailer, 0);
-                if (length <= 0 || length > self.Length - 8 - Magic.Length) throw new InvalidDataException("安装器数据长度无效。");
-                self.Seek(-(length + 8 + Magic.Length), SeekOrigin.End);
-                using (FileStream output = File.Create(zip))
-                {
-                    CopyExactly(self, output, length);
-                }
+                if (trailer[8 + i] != Magic[i]) throw new InvalidDataException("安装器数据标记无效。");
             }
-            ZipFile.ExtractToDirectory(zip, destination);
-            return destination;
+            long length = BitConverter.ToInt64(trailer, 0);
+            if (length <= 0 || length > self.Length - 8 - Magic.Length) throw new InvalidDataException("安装器数据长度无效。");
+            long start = self.Length - length - 8 - Magic.Length;
+            SubReadStream payload = new SubReadStream(self, start, length);
+            self = null;
+            return new PayloadPackage(payload, new ZipArchive(payload, ZipArchiveMode.Read, true));
         }
-        finally
+        catch
         {
-            try { if (File.Exists(zip)) File.Delete(zip); } catch { }
+            if (self != null) self.Dispose();
+            throw;
         }
+    }
+
+    public static string SafeTarget(string root, string entryName)
+    {
+        string relative = (entryName ?? "").Replace('/', Path.DirectorySeparatorChar);
+        string fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string full = Path.GetFullPath(Path.Combine(fullRoot, relative));
+        if (!full.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("安装数据包含非法路径。");
+        return full;
     }
 
     private static void ReadExactly(Stream stream, byte[] buffer)
@@ -84,17 +110,76 @@ internal static class Program
         }
     }
 
-    private static void CopyExactly(Stream input, Stream output, long length)
+}
+
+internal sealed class PayloadPackage : IDisposable
+{
+    public readonly ZipArchive Archive;
+    private readonly Stream payload;
+
+    public PayloadPackage(Stream payload, ZipArchive archive)
     {
-        byte[] buffer = new byte[1024 * 1024];
-        long remaining = length;
-        while (remaining > 0)
-        {
-            int read = input.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
-            if (read <= 0) throw new EndOfStreamException();
-            output.Write(buffer, 0, read);
-            remaining -= read;
-        }
+        this.payload = payload;
+        Archive = archive;
+    }
+
+    public void Dispose()
+    {
+        Archive.Dispose();
+        payload.Dispose();
+    }
+}
+
+internal sealed class SubReadStream : Stream
+{
+    private readonly Stream baseStream;
+    private readonly long start;
+    private readonly long length;
+    private long position;
+
+    public SubReadStream(Stream baseStream, long start, long length)
+    {
+        this.baseStream = baseStream;
+        this.start = start;
+        this.length = length;
+        baseStream.Seek(start, SeekOrigin.Begin);
+    }
+
+    public override bool CanRead { get { return true; } }
+    public override bool CanSeek { get { return true; } }
+    public override bool CanWrite { get { return false; } }
+    public override long Length { get { return length; } }
+    public override long Position
+    {
+        get { return position; }
+        set { position = Math.Max(0, Math.Min(length, value)); baseStream.Seek(start + position, SeekOrigin.Begin); }
+    }
+
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        long remaining = length - position;
+        if (remaining <= 0) return 0;
+        int read = baseStream.Read(buffer, offset, (int)Math.Min(count, remaining));
+        position += read;
+        return read;
+    }
+
+    public override long Seek(long offset, SeekOrigin origin)
+    {
+        long next = origin == SeekOrigin.Begin ? offset :
+            origin == SeekOrigin.Current ? position + offset : length + offset;
+        Position = next;
+        return position;
+    }
+
+    public override void Flush() { }
+    public override void SetLength(long value) { throw new NotSupportedException(); }
+    public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) baseStream.Dispose();
+        base.Dispose(disposing);
     }
 }
 
@@ -164,21 +249,42 @@ internal sealed class InstallerForm : Form
 
     private void Install()
     {
-        string temp = Path.Combine(Path.GetTempPath(), "gsd-pet-install-" + Guid.NewGuid().ToString("N"));
         try
         {
             SetStatus("正在读取内置安装数据…");
-            Directory.CreateDirectory(temp);
-            Program.ExtractPayload(temp);
-            string source = Directory.GetDirectories(temp, "gsd-pet-lite", SearchOption.TopDirectoryOnly).FirstOrDefault();
-            if (source == null) throw new DirectoryNotFoundException("安装数据中缺少 gsd-pet-lite 目录。");
-
-            SetStatus("正在关闭旧版进程…");
-            StopOldProcesses();
-
             string target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "gsd-pet");
-            SetStatus("正在安装到 " + target + "…");
-            CopyDirectory(source, target, temp);
+            using (PayloadPackage package = Program.OpenPayload())
+            {
+                List<ZipArchiveEntry> entries = package.Archive.Entries
+                    .Where(entry => entry.FullName.StartsWith("gsd-pet-lite/", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (entries.Count == 0) throw new DirectoryNotFoundException("安装数据中缺少 gsd-pet-lite 目录。");
+
+                SetStatus("正在关闭旧版进程…");
+                StopOldProcesses();
+                Directory.CreateDirectory(target);
+                SetStatus("正在安装到 " + target + "…");
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    ZipArchiveEntry entry = entries[i];
+                    string relative = entry.FullName.Substring("gsd-pet-lite/".Length);
+                    if (relative.Length == 0) continue;
+                    string destination = Program.SafeTarget(target, relative);
+                    if (entry.Name.Length == 0)
+                    {
+                        Directory.CreateDirectory(destination);
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(destination));
+                        using (Stream input = entry.Open())
+                        using (FileStream output = File.Create(destination))
+                            input.CopyTo(output);
+                    }
+                    Progress((i + 1) * 100 / Math.Max(1, entries.Count));
+                    if ((i + 1) % 40 == 0) SetStatus("正在安装文件 " + (i + 1) + " / " + entries.Count + "…");
+                }
+            }
 
             SetStatus("正在创建快捷方式…");
             string exe = Path.Combine(target, "gsd大肥鱼桌宠.exe");
@@ -209,25 +315,6 @@ internal sealed class InstallerForm : Form
                     "安装失败：\n" + error.Message + "\n\n详细信息已显示在窗口中。",
                     "安装失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }));
-        }
-        finally
-        {
-            try { Directory.Delete(temp, true); } catch { }
-        }
-    }
-
-    private void CopyDirectory(string source, string target, string tempRoot)
-    {
-        string[] files = Directory.GetFiles(source, "*", SearchOption.AllDirectories);
-        for (int i = 0; i < files.Length; i++)
-        {
-            string relative = files[i].Substring(source.Length).TrimStart('\\', '/');
-            string destination = Path.Combine(target, relative);
-            string directory = Path.GetDirectoryName(destination);
-            if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
-            File.Copy(files[i], destination, true);
-            Progress((i + 1) * 100 / Math.Max(1, files.Length));
-            if ((i + 1) % 40 == 0) SetStatus("正在复制文件 " + (i + 1) + " / " + files.Length + "…");
         }
     }
 
