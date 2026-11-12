@@ -17,50 +17,29 @@ if (-not $stageFull.StartsWith($rootFull, [System.StringComparison]::OrdinalIgno
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $stage, $dist | Out-Null
 
-Copy-Item -LiteralPath $PayloadZip -Destination (Join-Path $stage "payload.zip") -Force
-Copy-Item -LiteralPath (Join-Path $root "src\install\installer-payload.ps1") -Destination (Join-Path $stage "setup.ps1") -Force
-
 $target = Join-Path $dist "gsd-pet-lite-1.1-setup.exe"
 if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
-$sed = Join-Path $stage "installer.sed"
-$sourceDir = $stage.TrimEnd("\") + "\"
-$content = @"
-[Version]
-Class=IEXPRESS
-SEDVersion=3
-[Options]
-PackagePurpose=InstallApp
-ShowInstallProgramWindow=0
-HideExtractAnimation=1
-UseLongFileName=1
-InsideCompressed=0
-CAB_FixedSize=0
-CAB_ResvCodeSigning=0
-RebootMode=N
-InstallPrompt=
-DisplayLicense=
-FinishMessage=
-TargetName=$target
-FriendlyName=gsd-pet-lite
-AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File setup.ps1
-PostInstallCmd=<None>
-AdminQuietInstCmd=
-UserQuietInstCmd=
-SourceFiles=SourceFiles
-[Strings]
-FILE0="payload.zip"
-FILE1="setup.ps1"
-[SourceFiles]
-SourceFiles0=$sourceDir
-[SourceFiles0]
-%FILE0%=
-%FILE1%=
-"@
-Set-Content -LiteralPath $sed -Value $content -Encoding ASCII
-$iexpress = Start-Process -FilePath "$env:WINDIR\System32\iexpress.exe" -ArgumentList @("/N", "/Q", $sed) `
-  -WindowStyle Hidden -PassThru
-$iexpress.WaitForExit()
-if ($iexpress.ExitCode -ne 0) { throw "IExpress failed with exit code $($iexpress.ExitCode)" }
-if (-not (Test-Path -LiteralPath $target)) { throw "Installer was not produced: $target" }
+$bootstrap = Join-Path $stage "bootstrap.exe"
+$csc = Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe"
+if (-not (Test-Path -LiteralPath $csc)) { throw "C# compiler not found: $csc" }
+& $csc /nologo /target:winexe /optimize+ /out:$bootstrap `
+  /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Management.dll `
+  /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `
+  (Join-Path $root "src\install\SetupBootstrap.cs")
+if ($LASTEXITCODE -ne 0) { throw "Failed to compile setup bootstrap." }
+
+$magic = [System.Text.Encoding]::ASCII.GetBytes("GSD-PET-PAYLOAD-V1")
+$length = [System.BitConverter]::GetBytes([int64](Get-Item -LiteralPath $PayloadZip).Length)
+$output = [System.IO.File]::Create($target)
+try {
+  $bootstrapStream = [System.IO.File]::OpenRead($bootstrap)
+  try { $bootstrapStream.CopyTo($output) } finally { $bootstrapStream.Dispose() }
+  $payloadStream = [System.IO.File]::OpenRead($PayloadZip)
+  try { $payloadStream.CopyTo($output) } finally { $payloadStream.Dispose() }
+  $output.Write($length, 0, $length.Length)
+  $output.Write($magic, 0, $magic.Length)
+} finally {
+  $output.Dispose()
+}
 Write-Host "Built: $target"
 Write-Host ("Size: {0:N1} MB" -f ((Get-Item -LiteralPath $target).Length / 1MB))
