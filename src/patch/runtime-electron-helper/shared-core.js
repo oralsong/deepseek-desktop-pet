@@ -1896,6 +1896,8 @@ function readPosition(leaf$1) {
 	if (typeof d.anim === "string" && d.anim) extra.anim = d.anim;
 	if (d.facing === "left" || d.facing === "right") extra.facing = d.facing;
 	if (d.motion === "run" || d.motion === "walk") extra.motion = d.motion;
+	if (typeof d.startDelayMs === "number" && Number.isFinite(d.startDelayMs) && d.startDelayMs > 0)
+		extra.startDelayMs = Math.min(5000, d.startDelayMs);
 	if (d.carryCursor === true) extra.carry = {
 		dx: typeof d.handOffsetX === "number" && Number.isFinite(d.handOffsetX) ? d.handOffsetX : 0,
 		dy: typeof d.handOffsetY === "number" && Number.isFinite(d.handOffsetY) ? d.handOffsetY : 0

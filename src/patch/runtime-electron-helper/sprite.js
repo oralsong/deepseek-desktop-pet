@@ -108,6 +108,7 @@ class PetSprite {
     // 拖拽没有终点（指针一直喂目标），这条有终点，收敛/到点后必须自己收掉，否则 rAF 永远转下去
     this.posFollow = null;
     this.posFollowToken = 0;
+    this.positionCueTimer = null;
     this.cursorCarry = null;
     this.cursorCarryOn = false;
     this.space = null; // 抛掷空间（逐屏 AABB）缓存；显示器变化时由 relayout() 置空重建
@@ -891,6 +892,10 @@ class PetSprite {
 
   stopMove() {
     this.pendingMove = null;
+    if (this.positionCueTimer !== null) {
+      window.clearTimeout(this.positionCueTimer);
+      this.positionCueTimer = null;
+    }
     this.moveToken++;
     if (this.moveRef !== null) {
       cancelAnimationFrame(this.moveRef);

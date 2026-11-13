@@ -162,12 +162,14 @@
 					const pickupDuration = Math.max(900, Math.min(8000, Math.round(pickupDistance / 0.16)));
 					const carryDistance = Math.hypot(iconX - cursor.x, iconY - cursor.y);
 					const carryDuration = Math.max(1800, Math.min(12000, Math.round(carryDistance / 0.16)));
-					duration = pickupDuration + (pointAnim ? 500 : 120) + carryDuration;
+					const startDelayMs = 1000;
+					duration = startDelayMs + pickupDuration + (pointAnim ? 500 : 120) + startDelayMs + carryDuration;
 					state.writePet(petId, "position", {
 						x: pickupNx,
 						y: pickupNy,
 						mode: "line",
 						duration: pickupDuration,
+						startDelayMs,
 						motion: "run",
 						...(runAnim ? { anim: runAnim } : {}),
 						facing: cursor.x >= current.x * screenW + screenX ? "right" : "left"
@@ -183,6 +185,7 @@
 								y: targetNy,
 								mode: "line",
 								duration: carryDuration,
+								startDelayMs,
 								motion: "run",
 								carryCursor: true,
 								handOffsetX: handOffset,
@@ -191,9 +194,9 @@
 								facing: iconX >= cursor.x ? "right" : "left"
 							});
 							console.log("[dsh-pet:desktop] carrying mouse to=" + iconX + "," + iconY + " duration=" + carryDuration);
-							setTimeout(finish, carryDuration);
+							setTimeout(finish, startDelayMs + carryDuration);
 						}, pointAnim ? 500 : 120);
-					}, pickupDuration);
+					}, startDelayMs + pickupDuration);
 				} else {
 					const distance = current ? Math.hypot((targetNx - current.x) * screenW, (targetNy - current.y) * screenH) : 0;
 					duration = current ? Math.max(2200, Math.min(12000, Math.round(distance / 0.16))) : 4800;
@@ -202,12 +205,13 @@
 						y: targetNy,
 						mode: "line",
 						duration,
+						startDelayMs: 1000,
 						motion: "run",
 						...(runAnim ? { anim: runAnim } : {}),
 						facing: leftHalf ? "right" : "left"
 					});
-					console.log("[dsh-pet:desktop] cursor unavailable, direct run duration=" + duration);
-					setTimeout(finish, duration);
+					console.log("[dsh-pet:desktop] cursor unavailable, direct run duration=" + duration + " delay=1000");
+					setTimeout(finish, duration + 1000);
 				}
 			} else {
 				setTimeout(finish, 250);

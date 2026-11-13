@@ -358,8 +358,20 @@ function applyPositionLeaf(petId, leaf) {
   for (const s of sprites) {
     if (s.pet.id !== petId) continue;
     if (hit.facing) s.facing = hit.facing;
-    s.moveToCenter(hit.x, hit.y, hit.mode, hit.duration, hit.motion, hit.carry);
     if (hit.anim) s.playOnce(hit.anim);
+    const move = () => s.moveToCenter(hit.x, hit.y, hit.mode, hit.duration, hit.motion, hit.carry);
+    if (s.positionCueTimer !== null) {
+      window.clearTimeout(s.positionCueTimer);
+      s.positionCueTimer = null;
+    }
+    if (hit.startDelayMs > 0) {
+      s.positionCueTimer = window.setTimeout(() => {
+        s.positionCueTimer = null;
+        move();
+      }, hit.startDelayMs);
+    } else {
+      move();
+    }
   }
 }
 
