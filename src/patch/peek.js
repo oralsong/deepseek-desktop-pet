@@ -447,9 +447,29 @@ async function voiceServiceReady(cfg) {
 async function ensureVoiceService(cfg) {
 	if (await voiceServiceReady(cfg)) return true;
 	if (!cfg.voiceServerScript) return false;
+	if (!cfg.voicePython || !existsSync(cfg.voicePython) || !existsSync(cfg.voiceServerScript)) {
+		console.warn("[dsh-pet:peek] 语音包未安装，跳过克隆语音服务，改用系统语音");
+		return false;
+	}
 	const port = (cfg.voiceService.match(/:(\d+)/) || [, "8848"])[1];
 	try {
 		const child = spawn(cfg.voicePython, [cfg.voiceServerScript, "--port", port], { detached: true, stdio: "ignore", windowsHide: true });
+		const started = await new Promise((resolve) => {
+			const timer = setTimeout(() => resolve(false), 3000);
+			child.once("spawn", () => {
+				clearTimeout(timer);
+				resolve(true);
+			});
+			child.once("error", (e) => {
+				clearTimeout(timer);
+				console.warn("[dsh-pet:peek] 拉起语音服务失败：" + (e && e.message ? e.message : String(e)));
+				resolve(false);
+			});
+		});
+		if (!started) {
+			try { child.kill(); } catch { }
+			return false;
+		}
 		child.unref();
 		console.log("[dsh-pet:peek] 正在拉起语音服务 " + cfg.voiceService);
 	} catch (e) {
