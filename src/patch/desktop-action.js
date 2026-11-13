@@ -30,6 +30,19 @@ function runPowerShell(args, timeoutMs = 15000) {
 	});
 }
 
+function runDesktopInput(args, timeoutMs = 5000) {
+	return new Promise((resolve) => {
+		execFile(INPUT_EXE, args, { windowsHide: true, timeout: timeoutMs, encoding: "utf8" }, (error, stdout, stderr) => {
+			resolve({
+				ok: !error,
+				error: error instanceof Error ? error.message : error ? String(error) : "",
+				stdout: String(stdout || "").trim(),
+				stderr: String(stderr || "").trim()
+			});
+		});
+	});
+}
+
 async function runWithResult(args, timeoutMs) {
 	const run = await runPowerShell(args, timeoutMs);
 	try {
@@ -83,19 +96,29 @@ export async function invokeDesktopTarget(query) {
 
 export async function clickScreenPoint(x, y) {
 	if (process.env.DSH_PET_DESKTOP_DRY_RUN === "1") return { ok: true, dryRun: true, action: "screen-click", x, y };
-	return new Promise((resolve) => {
-		execFile(INPUT_EXE, ["click", String(Math.round(x)), String(Math.round(y))], { windowsHide: true, timeout: 5000 }, (error, stdout, stderr) => {
-			resolve({
-				ok: !error,
-				action: "screen-click",
-				x,
-				y,
-				error: error instanceof Error ? error.message : error ? String(error) : "",
-				stderr: String(stderr || "").trim(),
-				stdout: String(stdout || "").trim()
-			});
-		});
-	});
+	const result = await runDesktopInput(["click", String(Math.round(x)), String(Math.round(y))], 5000);
+	return { ...result, action: "screen-click", x, y };
+}
+
+export async function getCursorPosition() {
+	const result = await runDesktopInput(["cursor"], 3000);
+	const match = result.stdout.match(/^(-?\d+),(-?\d+)$/);
+	if (!result.ok || !match) return { ok: false, ...result };
+	return { ok: true, x: Number(match[1]), y: Number(match[2]) };
+}
+
+export async function animateCursor(x1, y1, x2, y2, duration, delay = 0) {
+	if (process.env.DSH_PET_DESKTOP_DRY_RUN === "1") return { ok: true, dryRun: true, action: "cursor-animate" };
+	const result = await runDesktopInput([
+		"animate",
+		String(Math.round(x1)),
+		String(Math.round(y1)),
+		String(Math.round(x2)),
+		String(Math.round(y2)),
+		String(Math.max(1, Math.round(duration))),
+		String(Math.max(0, Math.round(delay)))
+	], Math.max(5000, duration + delay + 3000));
+	return { ...result, action: "cursor-animate" };
 }
 
 export async function launchDesktopTarget(path) {

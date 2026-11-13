@@ -80,6 +80,7 @@ internal sealed class LauncherForm : Form
     private TextBox keyBox;
     private TextBox modelBox;
     private TextBox baseUrlBox;
+    private NumericUpDown sizeBox;
     private TextBox statusBox;
     private Button runButton;
     private CheckBox autostartBox;
@@ -254,16 +255,41 @@ internal sealed class LauncherForm : Form
         baseUrlBox = NewInput(false);
         table.Controls.Add(baseUrlBox, 1, 2);
 
+        AddLabel(table, "桌宠大小", 3);
+        var sizePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        sizePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
+        sizePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        sizeBox = new NumericUpDown
+        {
+            Minimum = 180,
+            Maximum = 900,
+            Increment = 20,
+            Dock = DockStyle.Fill,
+            BackColor = DesktopPetLauncher2.InputBg,
+            ForeColor = Color.FromArgb(230, 238, 252),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        sizePanel.Controls.Add(sizeBox, 0, 0);
+        sizePanel.Controls.Add(new Label
+        {
+            Text = "px（下次运行生效）",
+            ForeColor = DesktopPetLauncher2.Muted,
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(8, 8, 0, 0)
+        }, 1, 0);
+        table.Controls.Add(sizePanel, 1, 3);
+
         var show = new CheckBox { Text = "显示 API Key", ForeColor = DesktopPetLauncher2.Muted, AutoSize = true };
         show.CheckedChanged += delegate { keyBox.UseSystemPasswordChar = !show.Checked; };
-        table.Controls.Add(show, 1, 3);
+        table.Controls.Add(show, 1, 4);
         table.Controls.Add(new Label
         {
             Text = "DeepSeek 常用配置：模型 deepseek-flash，地址 https://api.deepseek.com\n密钥只保存在本机 data 目录。",
             ForeColor = DesktopPetLauncher2.Muted,
             AutoSize = true,
             MaximumSize = new Size(500, 0)
-        }, 1, 4);
+        }, 1, 5);
         page.Controls.Add(table);
         return page;
     }
@@ -298,12 +324,16 @@ internal sealed class LauncherForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 6,
+            RowCount = 7,
             Padding = new Padding(6)
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        for (int i = 0; i < 4; i++) table.RowStyles.Add(new RowStyle(SizeType.Absolute, i == 0 || i == 3 ? 52F : 128F));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 128F));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 128F));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
+        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
         table.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 0F));
         return table;
@@ -375,6 +405,9 @@ internal sealed class LauncherForm : Form
         keyBox.Text = TextValue(cfg, "apiKey", "");
         modelBox.Text = TextValue(cfg, "model", "deepseek-flash");
         baseUrlBox.Text = TextValue(cfg, "baseUrl", "https://api.deepseek.com");
+        int savedSize = 462;
+        int.TryParse(TextValue(cfg, "petSize", "462"), out savedSize);
+        sizeBox.Value = Math.Max(sizeBox.Minimum, Math.Min(sizeBox.Maximum, savedSize));
         autostartBox.Checked = BoolValue(cfg, "autostart", false);
     }
 
@@ -389,6 +422,7 @@ internal sealed class LauncherForm : Form
         cfg["apiKey"] = keyBox.Text.Trim();
         cfg["model"] = string.IsNullOrWhiteSpace(modelBox.Text) ? "deepseek-flash" : modelBox.Text.Trim();
         cfg["baseUrl"] = string.IsNullOrWhiteSpace(baseUrlBox.Text) ? "https://api.deepseek.com" : baseUrlBox.Text.Trim();
+        cfg["petSize"] = (int)sizeBox.Value;
         cfg["autostart"] = autostartBox.Checked;
         return cfg;
     }
@@ -443,7 +477,11 @@ internal sealed class LauncherForm : Form
         Directory.CreateDirectory(petConfigDir);
         EnsureMainConfig();
         EnsurePeekConfig(TextValue(cfg, "speechReference", ""));
-        WritePetConfig(TextValue(cfg, "petName", "哦鲸鲸"), ComposePersona(TextValue(cfg, "persona", ""), TextValue(cfg, "speechReference", "")));
+        WritePetConfig(
+            TextValue(cfg, "petName", "哦鲸鲸"),
+            ComposePersona(TextValue(cfg, "persona", ""), TextValue(cfg, "speechReference", "")),
+            Convert.ToInt32(cfg.ContainsKey("petSize") ? cfg["petSize"] : 462)
+        );
         WriteAiConfig(cfg);
     }
 
@@ -756,7 +794,7 @@ internal sealed class LauncherForm : Form
         if (promptMatch.Success) persona = UnescapeJsonString(promptMatch.Groups[1].Value);
     }
 
-    private void WritePetConfig(string name, string persona)
+    private void WritePetConfig(string name, string persona, int size)
     {
         string path = Path.Combine(petConfigDir, "main-config.jsonc");
         string text = File.ReadAllText(path, Encoding.UTF8);
@@ -766,6 +804,10 @@ internal sealed class LauncherForm : Form
             text = new Regex("(\"name\"\\s*:\\s*\")(?:\\\\.|[^\"\\\\])*(\")").Replace(text, m => m.Groups[1].Value + escapedName + m.Groups[2].Value, 1);
         else
             text = text.Replace("\"id\": \"main\",", "\"id\": \"main\",\r\n      \"name\": \"" + escapedName + "\",");
+        if (Regex.IsMatch(text, "\"size\"\\s*:"))
+            text = new Regex("(\"size\"\\s*:\\s*)\\d+").Replace(text, m => m.Groups[1].Value + Math.Max(180, Math.Min(900, size)), 1);
+        else
+            text = new Regex("(\"name\"\\s*:\\s*\"(?:\\\\.|[^\"\\\\])*\"\\s*,)").Replace(text, m => m.Groups[1].Value + "\r\n      \"size\": " + Math.Max(180, Math.Min(900, size)) + ",", 1);
         if (Regex.IsMatch(text, "\"whisperPrompt\"\\s*:"))
             text = new Regex("(\"whisperPrompt\"\\s*:\\s*\")(?:\\\\.|[^\"\\\\])*(\")").Replace(text, m => m.Groups[1].Value + escapedPersona + m.Groups[2].Value, 1);
         else if (!string.IsNullOrEmpty(escapedPersona))
