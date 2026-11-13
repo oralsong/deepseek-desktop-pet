@@ -123,11 +123,9 @@
 							await new Promise((resolve) => setTimeout(resolve, 650));
 						}
 						if (hasPoint) {
-							if (actionSource === "vision") {
-								clicked = (await __dshPetDesktop.clickScreenPoint(iconX, iconY)).ok === true;
-							} else {
+							clicked = (await __dshPetDesktop.clickScreenPoint(iconX, iconY)).ok === true;
+							if (!clicked && actionSource !== "vision") {
 								clicked = (await __dshPetDesktop.invokeDesktopTarget(targetName)).ok === true;
-								if (!clicked) clicked = (await __dshPetDesktop.clickScreenPoint(iconX, iconY)).ok === true;
 							}
 						}
 						if (!clicked && targetPath) launched = (await __dshPetDesktop.launchDesktopTarget(targetPath)).ok === true;
@@ -149,14 +147,15 @@
 				const current = pose.get(petId);
 				const cursor = await __dshPetDesktop.getCursorPosition();
 				const handOffset = leftHalf ? -offset : offset;
+				const handOffsetY = Math.round(petSize * 0.08);
 				const targetPetX = Math.min(screenX + screenW * 0.9, Math.max(screenX + screenW * 0.1, iconX - handOffset));
-				const targetPetY = Math.min(screenY + screenH * 0.9, Math.max(screenY + screenH * 0.1, iconY));
+				const targetPetY = Math.min(screenY + screenH * 0.9, Math.max(screenY + screenH * 0.1, iconY - handOffsetY));
 				const targetNx = (targetPetX - screenX) / screenW;
 				const targetNy = (targetPetY - screenY) / screenH;
 				const runAnim = desktopRunAnim(found);
 				if (cursor.ok && current) {
 					const pickupX = Math.min(screenX + screenW * 0.9, Math.max(screenX + screenW * 0.1, cursor.x - handOffset));
-					const pickupY = Math.min(screenY + screenH * 0.9, Math.max(screenY + screenH * 0.1, cursor.y));
+					const pickupY = Math.min(screenY + screenH * 0.9, Math.max(screenY + screenH * 0.1, cursor.y - handOffsetY));
 					const pickupNx = (pickupX - screenX) / screenW;
 					const pickupNy = (pickupY - screenY) / screenH;
 					const pickupDistance = Math.hypot((pickupNx - current.x) * screenW, (pickupNy - current.y) * screenH);
@@ -185,10 +184,12 @@
 								mode: "line",
 								duration: carryDuration,
 								motion: "run",
+								carryCursor: true,
+								handOffsetX: handOffset,
+								handOffsetY,
 								...(runAnim ? { anim: runAnim } : {}),
 								facing: iconX >= cursor.x ? "right" : "left"
 							});
-							void __dshPetDesktop.animateCursor(cursor.x, cursor.y, iconX, iconY, carryDuration, 0);
 							console.log("[dsh-pet:desktop] carrying mouse to=" + iconX + "," + iconY + " duration=" + carryDuration);
 							setTimeout(finish, carryDuration);
 						}, pointAnim ? 500 : 120);

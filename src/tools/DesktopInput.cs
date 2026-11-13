@@ -29,6 +29,19 @@ internal static class DesktopInput
             Console.Out.Write(point.X + "," + point.Y);
             return 0;
         }
+        if (args.Length == 1 && string.Equals(args[0], "stream", StringComparison.OrdinalIgnoreCase))
+        {
+            string line;
+            while ((line = Console.ReadLine()) != null)
+            {
+                if (string.Equals(line.Trim(), "stop", StringComparison.OrdinalIgnoreCase)) break;
+                string[] parts = line.Split(',');
+                int x;
+                int y;
+                if (parts.Length == 2 && int.TryParse(parts[0], out x) && int.TryParse(parts[1], out y)) SetCursorPos(x, y);
+            }
+            return 0;
+        }
         if (args.Length == 3 && string.Equals(args[0], "click", StringComparison.OrdinalIgnoreCase))
         {
             int x;
@@ -48,7 +61,7 @@ internal static class DesktopInput
             AnimateCursor(x1, y1, x2, y2, Math.Max(1, duration), Math.Max(0, delay));
             return 0;
         }
-        Console.Error.WriteLine("usage: desktop-input.exe cursor | click <x> <y> | animate <x1> <y1> <x2> <y2> <durationMs> <delayMs>");
+        Console.Error.WriteLine("usage: desktop-input.exe cursor | stream | click <x> <y> | animate <x1> <y1> <x2> <y2> <durationMs> <delayMs>");
         return 2;
     }
 

@@ -39,13 +39,15 @@ const standalonePath = join(PKG, "lib", "standalone.js");
 const sharedPath = join(PKG, "runtime", "electron-helper", "shared-core.js");
 const eventsPath = join(PKG, "runtime", "electron-helper", "events.js");
 const spritePath = join(PKG, "runtime", "electron-helper", "sprite.js");
-for (const file of [standalonePath, sharedPath, eventsPath, spritePath]) {
+const preloadPath = join(PKG, "runtime", "electron-helper", "preload.js");
+const mainPath = join(PKG, "runtime", "electron-helper", "main.js");
+for (const file of [standalonePath, sharedPath, eventsPath, spritePath, preloadPath, mainPath]) {
 	if (!existsSync(file)) die("找不到文件：" + file);
 }
 
 if (REVERT) {
 	let restored = 0;
-	for (const file of [standalonePath, sharedPath, eventsPath, spritePath]) {
+	for (const file of [standalonePath, sharedPath, eventsPath, spritePath, preloadPath, mainPath]) {
 		const backup = file + ".petdesktop.orig";
 		if (!existsSync(backup)) continue;
 		copyFileSync(backup, file);
@@ -123,6 +125,10 @@ function patchSharedCore(source) {
 		"\tif (typeof d.anim === \"string\" && d.anim) extra.anim = d.anim;",
 		"\tif (d.facing === \"left\" || d.facing === \"right\") extra.facing = d.facing;",
 		"\tif (d.motion === \"run\" || d.motion === \"walk\") extra.motion = d.motion;",
+		"\tif (d.carryCursor === true) extra.carry = {",
+		"\t\tdx: typeof d.handOffsetX === \"number\" && Number.isFinite(d.handOffsetX) ? d.handOffsetX : 0,",
+		"\t\tdy: typeof d.handOffsetY === \"number\" && Number.isFinite(d.handOffsetY) ? d.handOffsetY : 0",
+		"\t};",
 		"\tif (d.mode === \"line\") {",
 		"\t\tif (typeof d.duration !== \"number\" || !Number.isFinite(d.duration) || d.duration < 0) return null;",
 		"\t\treturn { x: d.x, y: d.y, mode: \"line\", duration: d.duration, ...extra };",
@@ -152,7 +158,7 @@ function patchEvents(source) {
 		"  for (const s of sprites) {",
 		"    if (s.pet.id !== petId) continue;",
 		"    if (hit.facing) s.facing = hit.facing;",
-		"    s.moveToCenter(hit.x, hit.y, hit.mode, hit.duration, hit.motion);",
+		"    s.moveToCenter(hit.x, hit.y, hit.mode, hit.duration, hit.motion, hit.carry);",
 		"    if (hit.anim) s.playOnce(hit.anim);",
 		"  }",
 		"}"
@@ -218,7 +224,7 @@ log("dry-run：standalone / shared-core / events / sprite 锚点全部命中（�
 	process.exit(0);
 }
 
-for (const file of [standalonePath, sharedPath, eventsPath, spritePath]) {
+for (const file of [standalonePath, sharedPath, eventsPath, spritePath, preloadPath, mainPath]) {
 	const backup = file + ".petdesktop.orig";
 	if (!existsSync(backup)) copyFileSync(file, backup);
 }
@@ -233,6 +239,10 @@ writeFileSync(standalonePath, patchedStandalone, "utf8");
 writeFileSync(sharedPath, patchedShared, "utf8");
 writeFileSync(eventsPath, patchedEvents, "utf8");
 writeFileSync(spritePath, patchedSprite, "utf8");
+const helperDir = join(HERE, "runtime-electron-helper");
+for (const name of ["shared-core.js", "events.js", "sprite.js", "preload.js", "main.js"]) {
+	copyFileSync(join(helperDir, name), join(PKG, "runtime", "electron-helper", name));
+}
 for (const name of ["desktop-action.js", "desktop-action.ps1"]) {
 	copyFileSync(join(HERE, name), join(PKG, "lib", name));
 }
