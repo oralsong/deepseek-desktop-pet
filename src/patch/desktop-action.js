@@ -6,8 +6,6 @@
  * found in the user's own Desktop folders.
  */
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,22 +30,15 @@ function runPowerShell(args, timeoutMs = 15000) {
 }
 
 async function runWithResult(args, timeoutMs) {
-	const dir = await mkdtemp(join(tmpdir(), "dsh-pet-desktop-"));
-	const outFile = join(dir, "result.json");
+	const run = await runPowerShell(args, timeoutMs);
 	try {
-		const run = await runPowerShell([...args, "-OutFile", outFile], timeoutMs);
-		try {
-			const raw = (await readFile(outFile, "utf8")).replace(/^\uFEFF/, "");
-			return JSON.parse(raw);
-		} catch {
-			return {
-				ok: false,
-				reason: "desktop-helper-error",
-				message: run.stderr || run.error || run.stdout || "桌面操作脚本没有返回结果"
-			};
-		}
-	} finally {
-		await rm(dir, { recursive: true, force: true }).catch(() => {});
+		return JSON.parse(String(run.stdout || "").replace(/^\uFEFF/, ""));
+	} catch {
+		return {
+			ok: false,
+			reason: "desktop-helper-error",
+			message: run.stderr || run.error || run.stdout || "桌面操作脚本没有返回结果"
+		};
 	}
 }
 
@@ -80,10 +71,17 @@ export async function findDesktopTarget(query) {
 }
 
 export async function clickDesktopPoint(x, y) {
+	if (process.env.DSH_PET_DESKTOP_DRY_RUN === "1") return { ok: true, dryRun: true, action: "click", x, y };
 	return runWithResult(["-Action", "click", "-X", String(Math.round(x)), "-Y", String(Math.round(y))], 5000);
 }
 
+export async function invokeDesktopTarget(query) {
+	if (process.env.DSH_PET_DESKTOP_DRY_RUN === "1") return { ok: true, dryRun: true, action: "invoke", query };
+	return runWithResult(["-Action", "invoke", "-Query", query], 10000);
+}
+
 export async function launchDesktopTarget(path) {
+	if (process.env.DSH_PET_DESKTOP_DRY_RUN === "1") return { ok: true, dryRun: true, action: "launch", path };
 	return runWithResult(["-Action", "launch", "-Target", path], 10000);
 }
 
