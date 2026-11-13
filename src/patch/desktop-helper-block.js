@@ -2,9 +2,15 @@
 	const desktopRunAnim = (found) => {
 		const actions = found?.conf?.animations?.moves?.actions;
 		if (!Array.isArray(actions)) return "";
-		const preferred = actions.find((item) => item && String(item.name || "").includes("\u5954\u8dd1"));
-		const chosen = preferred || actions[0];
-		return chosen && typeof chosen.name === "string" ? chosen.name : "";
+		const names = actions.map((item) => item && item.name).filter((name) => typeof name === "string");
+		const chosen = names.find((name) => name === "\u8783\u87f9\u8d70\u8def")
+			|| names.find((name) => name.includes("\u8de8\u6b65") || name.includes("\u8de1\u6b65"))
+			|| names[0];
+		return chosen || "";
+	};
+	const desktopIdleAnim = (found) => {
+		const idle = found?.conf?.animations?.idle;
+		return Array.isArray(idle) && typeof idle[0] === "string" ? idle[0] : "";
 	};
 	const desktopPointAnim = (found) => {
 		const candidates = [];
@@ -21,7 +27,9 @@
 				if (category && Array.isArray(category.actions)) candidates.push(...category.actions);
 			}
 		}
-		return candidates.find((name) => /点按|\u6572\u51fb|\u70b9\u51fb/.test(String(name))) || "";
+		return candidates.find((name) => name === "\u5de5\u4f5c\u72b6\u6001-\u5fd9\u788c\u70b9\u6309")
+			|| candidates.find((name) => /点按|\u6572\u51fb|\u70b9\u51fb/.test(String(name)))
+			|| "";
 	};
 	const desktopSay = async (petId, text) => {
 		let cfg = null;
@@ -112,15 +120,21 @@
 			console.log("[dsh-pet:desktop] target=" + targetName + " source=" + actionSource + " point=" + (hasPoint ? iconX + "," + iconY : "missing") + " path=" + (targetPath || "missing"));
 			const petSize = Number(found?.pet?.size) || 462;
 			const pointAnim = desktopPointAnim(found);
+			const idleAnim = desktopIdleAnim(found);
 			const finish = () => {
 				const run = async () => {
 					let clicked = false;
 					let launched = false;
 					try {
+						if (idleAnim) {
+							try { state.writePet(petId, "anim", { name: idleAnim }); } catch { }
+							console.log("[dsh-pet:desktop] arrived, idle=" + idleAnim);
+						}
+						await new Promise((resolve) => setTimeout(resolve, 1000));
 						if (pointAnim) {
 							try { state.writePet(petId, "anim", { name: pointAnim }); } catch { }
 							console.log("[dsh-pet:desktop] point animation=" + pointAnim);
-							await new Promise((resolve) => setTimeout(resolve, 650));
+							await new Promise((resolve) => setTimeout(resolve, 1000));
 						}
 						if (hasPoint) {
 							clicked = (await __dshPetDesktop.doubleClickScreenPoint(iconX, iconY)).ok === true;
