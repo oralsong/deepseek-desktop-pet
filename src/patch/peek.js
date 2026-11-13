@@ -1104,6 +1104,48 @@ async function visionDirect(ai, system, hint, bytes, timeoutMs) {
  * 环境自检：把"有没有 attachments / 当前模型是什么 / agents 服务长什么样"一次性问清楚。
  * 只读、不抛。给 /peek?debug=1 用。
  */
+/**
+ * Vision locator for screen actions. Returns normalized center coordinates.
+ * Desktop shortcuts and UI Automation are preferred; this is the fallback for
+ * controls that expose no accessibility name.
+ */
+export async function locateScreenTarget(dir, system, query, bytes, timeoutMs) {
+	const ai = await loadStandaloneAi(dir);
+	if (!ai) return { ok: false, reason: "no-api-key", message: "视觉定位需要先配置 API Key" };
+	const hint = [
+		"You are locating one clickable target in a Windows screenshot.",
+		"Target requested by the user: " + JSON.stringify(String(query || "")),
+		"Return ONLY a JSON object, no markdown:",
+		'{"found":true,"label":"visible label","x":0.5,"y":0.5,"confidence":0.9}',
+		"x and y are the target center normalized to 0..1 relative to the full screenshot.",
+		"If the target is not clearly visible, return {\"found\":false,\"confidence\":0}."
+	].join("\n");
+	const result = await visionDirect(ai, system, hint, bytes, timeoutMs);
+	if (!result.ok) return result;
+	const match = String(result.text || "").match(/\{[\s\S]*\}/);
+	if (!match) return { ok: false, reason: "invalid-vision-response", message: "视觉模型没有返回定位 JSON" };
+	let data;
+	try {
+		data = JSON.parse(match[0]);
+	} catch {
+		return { ok: false, reason: "invalid-vision-response", message: "视觉定位 JSON 无法解析" };
+	}
+	const x = Number(data.x);
+	const y = Number(data.y);
+	const confidence = Number(data.confidence);
+	if (data.found !== true || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+		return { ok: true, found: false, confidence: Number.isFinite(confidence) ? confidence : 0 };
+	}
+	return {
+		ok: true,
+		found: true,
+		x,
+		y,
+		confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0.5,
+		label: typeof data.label === "string" ? data.label.slice(0, 120) : ""
+	};
+}
+
 export async function peekEnv(ctx, bridge, cfg) {
 	const out = { attachments: false, llm: false, agentDefaultModel: null, agents: null, resolveModelInfo: null, configModel: null };
 	try {

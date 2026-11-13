@@ -38,13 +38,14 @@ function die(text) {
 const standalonePath = join(PKG, "lib", "standalone.js");
 const sharedPath = join(PKG, "runtime", "electron-helper", "shared-core.js");
 const eventsPath = join(PKG, "runtime", "electron-helper", "events.js");
-for (const file of [standalonePath, sharedPath, eventsPath]) {
+const spritePath = join(PKG, "runtime", "electron-helper", "sprite.js");
+for (const file of [standalonePath, sharedPath, eventsPath, spritePath]) {
 	if (!existsSync(file)) die("找不到文件：" + file);
 }
 
 if (REVERT) {
 	let restored = 0;
-	for (const file of [standalonePath, sharedPath, eventsPath]) {
+	for (const file of [standalonePath, sharedPath, eventsPath, spritePath]) {
 		const backup = file + ".petdesktop.orig";
 		if (!existsSync(backup)) continue;
 		copyFileSync(backup, file);
@@ -66,6 +67,23 @@ const DESKTOP_HELPERS = [
 	T(2) + "const chosen = preferred || actions[0];",
 	T(2) + "return chosen && typeof chosen.name === \"string\" ? chosen.name : \"\";",
 	T(1) + "};",
+	T(1) + "const desktopPointAnim = (found) => {",
+	T(2) + "const candidates = [];",
+	T(2) + "const events = found?.conf?.animations?.events?.workStatus;",
+	T(2) + "if (Array.isArray(events)) {",
+	T(3) + "for (const slot of events) {",
+	T(4) + "if (Array.isArray(slot)) candidates.push(...slot);",
+	T(4) + "else if (typeof slot === \"string\") candidates.push(slot);",
+	T(3) + "}",
+	T(2) + "}",
+	T(2) + "const categories = found?.conf?.animations?.categories;",
+	T(2) + "if (Array.isArray(categories)) {",
+	T(3) + "for (const category of categories) {",
+	T(4) + "if (category && Array.isArray(category.actions)) candidates.push(...category.actions);",
+	T(3) + "}",
+	T(2) + "}",
+	T(2) + "return candidates.find((name) => /点按|\\u6572\\u51fb|\\u70b9\\u51fb/.test(String(name))) || \"\";",
+	T(1) + "};",
 	T(1) + "const desktopSay = async (petId, text) => {",
 	T(2) + "let cfg = null;",
 	T(2) + "try { cfg = (await __dshPetPeek.loadPeekConfig(userRoot)).cfg; } catch { }",
@@ -86,11 +104,46 @@ const DESKTOP_HELPERS = [
 	T(2) + "}",
 	T(2) + "desktopActionBusy.add(petId);",
 	T(2) + "try {",
-	T(3) + "const foundIcon = await __dshPetDesktop.findDesktopTarget(query);",
+	T(3) + "let foundIcon = await __dshPetDesktop.findDesktopTarget(query);",
+	T(3) + "if (!foundIcon.ok || !foundIcon.match) {",
+	T(4) + "console.log(\"[dsh-pet:desktop] local lookup failed, trying screen vision\");",
+	T(4) + "try {",
+	T(5) + "const peekCfg = (await __dshPetPeek.loadPeekConfig(userRoot)).cfg;",
+	T(5) + "const frame = await __dshPetPeek.captureFrame({ ...peekCfg, maxWidth: Math.max(Number(peekCfg.maxWidth) || 0, 1600) });",
+	T(5) + "if (frame.ok) {",
+	T(6) + "const visual = await __dshPetPeek.locateScreenTarget(userRoot, petSystemPrompt(found), query, frame.shot, peekCfg.generateTimeoutMs);",
+	T(6) + "console.log(\"[dsh-pet:desktop] vision=\" + JSON.stringify(visual));",
+	T(6) + "if (visual.ok && visual.found && Number(visual.confidence) >= 0.35) {",
+	T(7) + "const detailScreen = foundIcon.detail && foundIcon.detail.screen ? foundIcon.detail.screen : {};",
+	T(7) + "const screenWidth = Number(frame.screenWidth) || Number(detailScreen.width) || 1920;",
+	T(7) + "const screenHeight = Number(frame.screenHeight) || Number(detailScreen.height) || 1080;",
+	T(7) + "const screenX = Number(detailScreen.x) || 0;",
+	T(7) + "const screenY = Number(detailScreen.y) || 0;",
+	T(7) + "foundIcon = {",
+	T(8) + "ok: true,",
+	T(8) + "match: {",
+	T(9) + "name: visual.label || query,",
+	T(9) + "path: \"\",",
+	T(9) + "x: screenX + visual.x * screenWidth,",
+	T(9) + "y: screenY + visual.y * screenHeight,",
+	T(9) + "score: Math.round(Number(visual.confidence) * 1000),",
+	T(9) + "visible: true,",
+	T(9) + "source: \"vision\"",
+	T(8) + "},",
+	T(8) + "screen: { x: screenX, y: screenY, width: screenWidth, height: screenHeight },",
+	T(8) + "foreground: { desktop: false },",
+	T(8) + "source: \"vision\"",
+	T(7) + "};",
+	T(6) + "}",
+	T(5) + "}",
+	T(4) + "} catch (e) {",
+	T(5) + "console.log(\"[dsh-pet:desktop] vision failed=\" + (e instanceof Error ? e.message : String(e)));",
+	T(4) + "}",
+	T(3) + "}",
 	T(3) + "if (!foundIcon.ok || !foundIcon.match) {",
 	T(4) + "console.log(\"[dsh-pet:desktop] lookup failed \" + JSON.stringify(foundIcon));",
 	T(4) + "desktopActionBusy.delete(petId);",
-	T(4) + "const text = \"\\u684c\\u9762\\u4e0a\\u6ca1\\u627e\\u5230\\u201c\" + query + \"\\u201d\\uff0c\\u53ef\\u4ee5\\u628a\\u5b83\\u653e\\u5230\\u684c\\u9762\\u6216\\u6539\\u4e2a\\u540d\\u5b57\\u3002\";",
+	T(4) + "const text = \"\\u684c\\u9762\\u548c\\u5f53\\u524d\\u753b\\u9762\\u91cc\\u90fd\\u6ca1\\u627e\\u5230\\u201c\" + query + \"\\u201d\\uff0c\\u8bf7\\u786e\\u8ba4\\u5b83\\u6b63\\u5728\\u5c4f\\u5e55\\u4e0a\\u53ef\\u89c1\\u3002\";",
 	T(4) + "const spoke = await desktopSay(petId, text);",
 	T(4) + "return {",
 	T(5) + "ok: false,",
@@ -100,6 +153,7 @@ const DESKTOP_HELPERS = [
 	T(4) + "};",
 	T(3) + "}",
 	T(3) + "const match = foundIcon.match;",
+	T(3) + "const actionSource = String(match.source || foundIcon.source || \"desktop\");",
 	T(3) + "const screen = foundIcon.screen || {};",
 	T(3) + "const targetName = String(match.name || query).replace(/\\.(?:exe|lnk|url)$/i, \"\");",
 	T(3) + "const targetPath = typeof match.path === \"string\" ? match.path : \"\";",
@@ -110,7 +164,7 @@ const DESKTOP_HELPERS = [
 	T(3) + "const iconX = Number(match.x);",
 	T(3) + "const iconY = Number(match.y);",
 	T(3) + "const hasPoint = Number.isFinite(iconX) && Number.isFinite(iconY) && screenW > 0 && screenH > 0;",
-	T(3) + "console.log(\"[dsh-pet:desktop] target=\" + targetName + \" point=\" + (hasPoint ? iconX + \",\" + iconY : \"missing\") + \" path=\" + (targetPath || \"missing\"));",
+	T(3) + "console.log(\"[dsh-pet:desktop] target=\" + targetName + \" source=\" + actionSource + \" point=\" + (hasPoint ? iconX + \",\" + iconY : \"missing\") + \" path=\" + (targetPath || \"missing\"));",
 	T(3) + "const petSize = Number(found?.pet?.size) || 462;",
 	T(3) + "let duration = 900;",
 	T(3) + "if (hasPoint) {",
@@ -122,28 +176,42 @@ const DESKTOP_HELPERS = [
 	T(4) + "const ny = (petY - screenY) / screenH;",
 	T(4) + "const current = pose.get(petId);",
 	T(4) + "const distance = current ? Math.hypot((nx - current.x) * screenW, (ny - current.y) * screenH) : 0;",
-	T(4) + "duration = current ? Math.max(1400, Math.min(4600, Math.round(distance / 0.72))) : 2600;",
+	T(4) + "duration = current ? Math.max(1800, Math.min(7500, Math.round(distance / 0.28))) : 3600;",
 	T(4) + "const runAnim = desktopRunAnim(found);",
 	T(4) + "state.writePet(petId, \"position\", {",
 	T(5) + "x: nx,",
 	T(5) + "y: ny,",
 	T(5) + "mode: \"line\",",
 	T(5) + "duration,",
+	T(5) + "motion: \"run\",",
 	T(5) + "...(runAnim ? { anim: runAnim } : {}),",
 	T(5) + "facing: leftHalf ? \"right\" : \"left\"",
 	T(4) + "});",
-	T(4) + "console.log(\"[dsh-pet:desktop] position pet=\" + petId + \" x=\" + nx.toFixed(4) + \" y=\" + ny.toFixed(4) + \" duration=\" + duration);",
+	T(4) + "console.log(\"[dsh-pet:desktop] run position pet=\" + petId + \" x=\" + nx.toFixed(4) + \" y=\" + ny.toFixed(4) + \" duration=\" + duration);",
 	T(3) + "}",
 	T(3) + "const opening = hasPoint",
-	T(4) + "? \"\\u8fd9\\u5c31\\u8dd1\\u8fc7\\u53bb\\u5e2e\\u4f60\\u6253\\u5f00\" + targetName",
+	T(4) + "? (actionSource === \"vision\" ? \"\\u6211\\u770b\\u5230\\u4e86\\uff0c\\u8fd9\\u5c31\\u8dd1\\u8fc7\\u53bb\\u70b9\" : \"\\u8fd9\\u5c31\\u8dd1\\u8fc7\\u53bb\\u5e2e\\u4f60\\u6253\\u5f00\") + targetName",
 	T(4) + ": \"\\u684c\\u9762\\u56fe\\u6807\\u6682\\u65f6\\u6293\\u4e0d\\u5230\\u5750\\u6807\\uff0c\\u6211\\u76f4\\u63a5\\u5e2e\\u4f60\\u6253\\u5f00\" + targetName;",
 	T(3) + "const spoke = await desktopSay(petId, opening);",
+	T(3) + "const pointAnim = desktopPointAnim(found);",
 	T(3) + "const finish = () => {",
 	T(4) + "const run = async () => {",
 	T(5) + "let clicked = false;",
 	T(5) + "let launched = false;",
 	T(5) + "try {",
-	T(6) + "if (hasPoint) clicked = (await __dshPetDesktop.invokeDesktopTarget(targetName)).ok === true;",
+	T(6) + "if (pointAnim) {",
+	T(7) + "try { state.writePet(petId, \"anim\", { name: pointAnim }); } catch { }",
+	T(7) + "console.log(\"[dsh-pet:desktop] point animation=\" + pointAnim);",
+	T(7) + "await new Promise((resolve) => setTimeout(resolve, 650));",
+	T(6) + "}",
+	T(6) + "if (hasPoint) {",
+	T(7) + "if (actionSource === \"vision\") {",
+	T(8) + "clicked = (await __dshPetDesktop.clickScreenPoint(iconX, iconY)).ok === true;",
+	T(7) + "} else {",
+	T(8) + "clicked = (await __dshPetDesktop.invokeDesktopTarget(targetName)).ok === true;",
+	T(8) + "if (!clicked) clicked = (await __dshPetDesktop.clickScreenPoint(iconX, iconY)).ok === true;",
+	T(7) + "}",
+	T(6) + "}",
 	T(6) + "if (!clicked && targetPath) launched = (await __dshPetDesktop.launchDesktopTarget(targetPath)).ok === true;",
 	T(6) + "console.log(\"[dsh-pet:desktop] finished clicked=\" + clicked + \" launched=\" + launched);",
 	T(6) + "state.writePet(petId, \"say\", {",
@@ -155,11 +223,11 @@ const DESKTOP_HELPERS = [
 	T(4) + "};",
 	T(4) + "void run();",
 	T(3) + "};",
-	T(3) + "setTimeout(finish, Math.max(250, duration + 120));",
+	T(3) + "setTimeout(finish, Math.max(250, duration));",
 	T(3) + "return {",
 	T(4) + "ok: true,",
 	T(4) + "text: opening,",
-	T(4) + "action: { kind: \"desktop-open\", target: targetName, moved: hasPoint, duration },",
+	T(4) + "action: { kind: \"desktop-open\", target: targetName, source: actionSource, moved: hasPoint, duration },",
 	T(4) + "...(spoke && spoke.ok ? { spoke: { ok: true, seconds: spoke.seconds, file: spoke.file } } : {})",
 	T(3) + "};",
 	T(2) + "} catch (e) {",
@@ -231,6 +299,7 @@ function patchSharedCore(source) {
 		"\tconst extra = {};",
 		"\tif (typeof d.anim === \"string\" && d.anim) extra.anim = d.anim;",
 		"\tif (d.facing === \"left\" || d.facing === \"right\") extra.facing = d.facing;",
+		"\tif (d.motion === \"run\" || d.motion === \"walk\") extra.motion = d.motion;",
 		"\tif (d.mode === \"line\") {",
 		"\t\tif (typeof d.duration !== \"number\" || !Number.isFinite(d.duration) || d.duration < 0) return null;",
 		"\t\treturn { x: d.x, y: d.y, mode: \"line\", duration: d.duration, ...extra };",
@@ -260,7 +329,7 @@ function patchEvents(source) {
 		"  for (const s of sprites) {",
 		"    if (s.pet.id !== petId) continue;",
 		"    if (hit.facing) s.facing = hit.facing;",
-		"    s.moveToCenter(hit.x, hit.y, hit.mode, hit.duration);",
+		"    s.moveToCenter(hit.x, hit.y, hit.mode, hit.duration, hit.motion);",
 		"    if (hit.anim) s.playOnce(hit.anim);",
 		"  }",
 		"}"
@@ -269,26 +338,64 @@ function patchEvents(source) {
 	return source.replace(oldBlock, newBlock);
 }
 
+function patchSprite(source) {
+	if (source.includes("motion === 'run' || motion === 'walk'")) return source;
+	const oldSignature = "  moveToCenter(rx, ry, mode, duration) {";
+	const newSignature = "  moveToCenter(rx, ry, mode, duration, motion) {";
+	if (!source.includes(oldSignature)) throw new Error("sprite moveToCenter signature anchor not found");
+	let out = source.replace(oldSignature, newSignature);
+	const oldStep = [
+		"        const p = Math.min((performance.now() - t0) / duration, 1);",
+		"        if (p >= 1) {",
+		"          // 精确落位：终点不留残余偏差（弹簧那条靠收敛阈值收尾，这条靠 p 到 1）",
+		"          this.posFollow = null;",
+		"          this.sendBounds(px, py);",
+		"          this.customPos = { rx: fx, ry: fy };",
+		"          return;",
+		"        }",
+		"        this.sendBounds(fromX + (px - fromX) * p, fromY + (py - fromY) * p);"
+	].join("\n");
+	const newStep = [
+		"        const raw = Math.min((performance.now() - t0) / duration, 1);",
+		"        if (raw >= 1) {",
+		"          // 精确落位：终点不留残余偏差（弹簧那条靠收敛阈值收尾，这条靠 p 到 1）",
+		"          this.posFollow = null;",
+		"          this.sendBounds(px, py);",
+		"          this.customPos = { rx: fx, ry: fy };",
+		"          return;",
+		"        }",
+		"        const p = motion === 'run' || motion === 'walk' ? raw * raw * (3 - 2 * raw) : raw;",
+		"        const bob = motion === 'run'",
+		"          ? Math.sin(raw * Math.PI * 8) * Math.min(5, this.size * 0.012) * Math.sin(Math.PI * raw)",
+		"          : 0;",
+		"        this.sendBounds(fromX + (px - fromX) * p, fromY + (py - fromY) * p + bob);"
+	].join("\n");
+	if (!out.includes(oldStep)) throw new Error("sprite moveToCenter step anchor not found");
+	return out.replace(oldStep, newStep);
+}
+
 const standalone = readFileSync(standalonePath, "utf8");
 const shared = readFileSync(sharedPath, "utf8");
 const events = readFileSync(eventsPath, "utf8");
 let patchedStandalone;
 let patchedShared;
 let patchedEvents;
+let patchedSprite;
 try {
 	patchedStandalone = patchStandalone(standalone);
 	patchedShared = patchSharedCore(shared);
 	patchedEvents = patchEvents(events);
+	patchedSprite = patchSprite(readFileSync(spritePath, "utf8"));
 } catch (e) {
 	die(e instanceof Error ? e.message : String(e));
 }
 
 if (DRY) {
-	log("dry-run：standalone / shared-core / events 锚点全部命中（未写盘）");
+log("dry-run：standalone / shared-core / events / sprite 锚点全部命中（未写盘）");
 	process.exit(0);
 }
 
-for (const file of [standalonePath, sharedPath, eventsPath]) {
+for (const file of [standalonePath, sharedPath, eventsPath, spritePath]) {
 	const backup = file + ".petdesktop.orig";
 	if (!existsSync(backup)) copyFileSync(file, backup);
 }
@@ -302,7 +409,18 @@ if (check.status !== 0) {
 writeFileSync(standalonePath, patchedStandalone, "utf8");
 writeFileSync(sharedPath, patchedShared, "utf8");
 writeFileSync(eventsPath, patchedEvents, "utf8");
+writeFileSync(spritePath, patchedSprite, "utf8");
 for (const name of ["desktop-action.js", "desktop-action.ps1"]) {
 	copyFileSync(join(HERE, name), join(PKG, "lib", name));
+}
+const inputSource = join(HERE, "..", "tools", "DesktopInput.cs");
+const inputExe = join(PKG, "lib", "desktop-input.exe");
+const csc = join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework", "v4.0.30319", "csc.exe");
+if (existsSync(inputSource) && existsSync(csc)) {
+	const built = spawnSync(csc, ["/nologo", "/target:exe", "/optimize+", "/out:" + inputExe, inputSource], {
+		encoding: "utf8",
+		windowsHide: true
+	});
+	if (built.status !== 0) die("desktop-input.exe 编译失败：" + ((built.stdout || "") + (built.stderr || "")).slice(0, 1200));
 }
 log("桌面命令补丁已应用 ✔");

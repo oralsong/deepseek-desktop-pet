@@ -113,6 +113,42 @@ function Get-DesktopItems {
   return $out
 }
 
+function Get-GlobalItems {
+  $types = @(
+    [System.Windows.Automation.ControlType]::Button,
+    [System.Windows.Automation.ControlType]::MenuItem,
+    [System.Windows.Automation.ControlType]::ListItem,
+    [System.Windows.Automation.ControlType]::Hyperlink,
+    [System.Windows.Automation.ControlType]::TabItem,
+    [System.Windows.Automation.ControlType]::CheckBox
+  )
+  $conditions = foreach ($type in $types) {
+    New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      $type
+    )
+  }
+  $condition = New-Object System.Windows.Automation.OrCondition([System.Windows.Automation.Condition[]]$conditions)
+  $elements = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    $condition
+  )
+  $out = @()
+  for ($i = 0; $i -lt $elements.Count; $i++) {
+    $element = $elements.Item($i)
+    $rect = $element.Current.BoundingRectangle
+    if ($element.Current.IsOffscreen -or -not $element.Current.IsEnabled) { continue }
+    if (-not $element.Current.Name -or $rect.IsEmpty -or $rect.Width -le 0 -or $rect.Height -le 0) { continue }
+    $out += [pscustomobject]@{
+      Name = $element.Current.Name
+      X = [int]($rect.X + $rect.Width / 2)
+      Y = [int]($rect.Y + $rect.Height / 2)
+      Element = $element
+    }
+  }
+  return $out
+}
+
 function Find-BestItem([object[]]$Items, [string]$QueryNorm) {
   $ranked = foreach ($item in $Items) {
     $score = Get-MatchScore $QueryNorm $item.Name
@@ -157,6 +193,13 @@ try {
   $items = @(Get-DesktopItems)
   $match = Find-BestItem $items $queryNorm
   $match = if ($match.Count -gt 0) { $match[0] } else { $null }
+  $source = "desktop"
+  if (-not $match) {
+    $globalItems = @(Get-GlobalItems)
+    $match = Find-BestItem $globalItems $queryNorm
+    $match = if ($match.Count -gt 0) { $match[0] } else { $null }
+    $source = "uia"
+  }
 
   if ($Action -eq "invoke") {
     if (-not $match) {
@@ -171,6 +214,7 @@ try {
       name = $match.Item.Name
       x = $match.Item.X
       y = $match.Item.Y
+      source = $source
     }
     if (-not $invoked) { $result.reason = "invoke-unsupported" }
     Write-Result $result
@@ -178,26 +222,40 @@ try {
   }
 
   $paths = Get-DesktopPaths
-  $candidates = foreach ($item in $items) {
-    $score = Get-MatchScore $queryNorm $item.Name
-    if ($score -lt 0) { continue }
-    [pscustomobject]@{
-      name = $item.Name
-      path = if ($paths.ContainsKey($item.Name)) { $paths[$item.Name] } else { "" }
-      x = $item.X
-      y = $item.Y
-      score = $score
+  if ($source -eq "uia" -and $match) {
+    $best = [pscustomobject]@{
+      name = $match.Item.Name
+      path = ""
+      x = $match.Item.X
+      y = $match.Item.Y
+      score = $match.Score
       visible = $true
+      source = "uia"
     }
+  } else {
+    $candidates = foreach ($item in $items) {
+      $score = Get-MatchScore $queryNorm $item.Name
+      if ($score -lt 0) { continue }
+      [pscustomobject]@{
+        name = $item.Name
+        path = if ($paths.ContainsKey($item.Name)) { $paths[$item.Name] } else { "" }
+        x = $item.X
+        y = $item.Y
+        score = $score
+        visible = $true
+        source = "desktop"
+      }
+    }
+    $best = @($candidates | Sort-Object score -Descending | Select-Object -First 1)
+    $best = if ($best.Count -gt 0) { $best[0] } else { $null }
   }
-  $best = @($candidates | Sort-Object score -Descending | Select-Object -First 1)
-  $best = if ($best.Count -gt 0) { $best[0] } else { $null }
   $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
   Write-Result @{
     ok = [bool]$best
     action = "find"
     query = $Query
     match = $best
+    source = $source
     iconCount = $items.Count
     screen = @{
       x = $screen.Left

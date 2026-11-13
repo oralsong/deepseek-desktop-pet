@@ -55,6 +55,9 @@ Copy-Item -LiteralPath (Join-Path $root "Readme.md") -Destination (Join-Path $st
 
 $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe"
 if (-not (Test-Path -LiteralPath $csc)) { throw "C# compiler not found: $csc" }
+$inputExe = Join-Path $stage "app\dsh-pet\lib\desktop-input.exe"
+& $csc /nologo /target:exe /optimize+ /out:$inputExe (Join-Path $root "src\tools\DesktopInput.cs")
+if ($LASTEXITCODE -ne 0) { throw "Failed to compile desktop-input." }
 $exe = Join-Path $stage "gsd大肥鱼桌宠.exe"
 & $csc /nologo /target:winexe /optimize+ /out:$exe `
   /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll `

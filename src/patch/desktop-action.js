@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "desktop-action.ps1");
+const INPUT_EXE = join(dirname(fileURLToPath(import.meta.url)), "desktop-input.exe");
 
 function runPowerShell(args, timeoutMs = 15000) {
 	return new Promise((resolve) => {
@@ -51,7 +52,7 @@ export function parseDesktopOpenCommand(text) {
 		.replace(/[，,。.!！?？\s]+$/, "")
 		.replace(/^(?:请|麻烦你?|帮我|给我|快去|去|立刻|马上)\s*/i, "");
 	const match = normalized.match(
-		/^(?:打开|启动|运行|点开|开一下|open|launch|start)\s*(?:一下|下)?\s*(.+?)(?:吧|呀|啊|呗)?$/i
+		/^(?:打开|启动|运行|点开|开一下|点击|点一下|按下|open|launch|start|click|press)\s*(?:一下|下)?\s*(.+?)(?:吧|呀|啊|呗)?$/i
 	);
 	if (!match) return null;
 	const target = match[1]
@@ -78,6 +79,23 @@ export async function clickDesktopPoint(x, y) {
 export async function invokeDesktopTarget(query) {
 	if (process.env.DSH_PET_DESKTOP_DRY_RUN === "1") return { ok: true, dryRun: true, action: "invoke", query };
 	return runWithResult(["-Action", "invoke", "-Query", query], 10000);
+}
+
+export async function clickScreenPoint(x, y) {
+	if (process.env.DSH_PET_DESKTOP_DRY_RUN === "1") return { ok: true, dryRun: true, action: "screen-click", x, y };
+	return new Promise((resolve) => {
+		execFile(INPUT_EXE, ["click", String(Math.round(x)), String(Math.round(y))], { windowsHide: true, timeout: 5000 }, (error, stdout, stderr) => {
+			resolve({
+				ok: !error,
+				action: "screen-click",
+				x,
+				y,
+				error: error instanceof Error ? error.message : error ? String(error) : "",
+				stderr: String(stderr || "").trim(),
+				stdout: String(stdout || "").trim()
+			});
+		});
+	});
 }
 
 export async function launchDesktopTarget(path) {
