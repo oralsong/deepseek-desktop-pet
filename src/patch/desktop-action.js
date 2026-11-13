@@ -100,6 +100,12 @@ export async function clickScreenPoint(x, y) {
 	return { ...result, action: "screen-click", x, y };
 }
 
+export async function doubleClickScreenPoint(x, y) {
+	if (process.env.DSH_PET_DESKTOP_DRY_RUN === "1") return { ok: true, dryRun: true, action: "screen-double-click", x, y };
+	const result = await runDesktopInput(["doubleclick", String(Math.round(x)), String(Math.round(y))], 5000);
+	return { ...result, action: "screen-double-click", x, y };
+}
+
 export async function getCursorPosition() {
 	const result = await runDesktopInput(["cursor"], 3000);
 	const match = result.stdout.match(/^(-?\d+),(-?\d+)$/);

@@ -123,7 +123,7 @@
 							await new Promise((resolve) => setTimeout(resolve, 650));
 						}
 						if (hasPoint) {
-							clicked = (await __dshPetDesktop.clickScreenPoint(iconX, iconY)).ok === true;
+							clicked = (await __dshPetDesktop.doubleClickScreenPoint(iconX, iconY)).ok === true;
 							if (!clicked && actionSource !== "vision") {
 								clicked = (await __dshPetDesktop.invokeDesktopTarget(targetName)).ok === true;
 							}
@@ -159,9 +159,9 @@
 					const pickupNx = (pickupX - screenX) / screenW;
 					const pickupNy = (pickupY - screenY) / screenH;
 					const pickupDistance = Math.hypot((pickupNx - current.x) * screenW, (pickupNy - current.y) * screenH);
-					const pickupDuration = Math.max(700, Math.min(5000, Math.round(pickupDistance / 0.28)));
+					const pickupDuration = Math.max(900, Math.min(8000, Math.round(pickupDistance / 0.16)));
 					const carryDistance = Math.hypot(iconX - cursor.x, iconY - cursor.y);
-					const carryDuration = Math.max(1400, Math.min(7500, Math.round(carryDistance / 0.28)));
+					const carryDuration = Math.max(1800, Math.min(12000, Math.round(carryDistance / 0.16)));
 					duration = pickupDuration + (pointAnim ? 500 : 120) + carryDuration;
 					state.writePet(petId, "position", {
 						x: pickupNx,
@@ -196,7 +196,7 @@
 					}, pickupDuration);
 				} else {
 					const distance = current ? Math.hypot((targetNx - current.x) * screenW, (targetNy - current.y) * screenH) : 0;
-					duration = current ? Math.max(1800, Math.min(7500, Math.round(distance / 0.28))) : 3600;
+					duration = current ? Math.max(2200, Math.min(12000, Math.round(distance / 0.16))) : 4800;
 					state.writePet(petId, "position", {
 						x: targetNx,
 						y: targetNy,
@@ -227,4 +227,3 @@
 			return { ok: false, reason: "desktop-action-error", message: e instanceof Error ? e.message : String(e) };
 		}
 	};
-	/**

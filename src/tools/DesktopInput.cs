@@ -52,6 +52,20 @@ internal static class DesktopInput
             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
             return 0;
         }
+        if (args.Length == 3 && string.Equals(args[0], "doubleclick", StringComparison.OrdinalIgnoreCase))
+        {
+            int x;
+            int y;
+            if (!int.TryParse(args[1], out x) || !int.TryParse(args[2], out y)) return 2;
+            if (!SetCursorPos(x, y)) return 3;
+            for (int i = 0; i < 2; i++)
+            {
+                mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                if (i == 0) Thread.Sleep(120);
+            }
+            return 0;
+        }
         if (args.Length == 7 && string.Equals(args[0], "animate", StringComparison.OrdinalIgnoreCase))
         {
             int x1, y1, x2, y2, duration, delay;
@@ -61,7 +75,7 @@ internal static class DesktopInput
             AnimateCursor(x1, y1, x2, y2, Math.Max(1, duration), Math.Max(0, delay));
             return 0;
         }
-        Console.Error.WriteLine("usage: desktop-input.exe cursor | stream | click <x> <y> | animate <x1> <y1> <x2> <y2> <durationMs> <delayMs>");
+        Console.Error.WriteLine("usage: desktop-input.exe cursor | stream | click <x> <y> | doubleclick <x> <y> | animate <x1> <y1> <x2> <y2> <durationMs> <delayMs>");
         return 2;
     }
 
